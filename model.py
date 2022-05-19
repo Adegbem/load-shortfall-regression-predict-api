@@ -27,6 +27,7 @@ import pandas as pd
 import pickle
 import json
 
+
 def _preprocess_data(data):
     """Private helper function to preprocess data for model prediction.
 
@@ -58,12 +59,77 @@ def _preprocess_data(data):
     # ---------------------------------------------------------------
 
     # ----------- Replace this code with your own preprocessing steps --------
-    predict_vector = feature_vector_df[['Madrid_wind_speed','Bilbao_rain_1h','Valencia_wind_speed']]
+    # creating a function that can split the time column
+    def convert_time(row):
+        date, time = row.split(' ')
+        year, month, day = date.split('-')
+        hour = time.split(':')[0]
+        return year, month, day, hour  # we can also return a pd.Series([...]) and not use a zip function later on
+
+    # # splitting the time column into features
+    # feature_vector_df['year'], feature_vector_df['month'], feature_vector_df['day'], feature_vector_df['hour'] \
+    #     = zip(*feature_vector_df['time'].map(convert_time))
+
+    # splitting the time column into features
+    feature_vector_df['year'], feature_vector_df['month'], feature_vector_df['day'], feature_vector_df['hour'] \
+        = zip(*feature_vector_df['time'].map(convert_time))
+
+    # we need to convert the new features to numeric and drop the old time column
+    cols = ['year', 'month', 'day', 'hour']
+    feature_vector_df[cols] = feature_vector_df[cols].apply(pd.to_numeric, errors='coerce', axis=1)
+    feature_vector_df.drop('time', axis=1, inplace=True)
+
+    feature_vector_df['Valencia_wind_deg'] = feature_vector_df['Valencia_wind_deg'].str.extract('(\d+)').astype('int64')
+    feature_vector_df['Seville_pressure'] = feature_vector_df['Seville_pressure'].str.extract('(\d+)').astype('int64')
+    feature_vector_df = feature_vector_df.drop(['Unnamed: 0'], axis=1)
+
+    def classify_parameters(input_df):
+        weather_dict = {}
+        for x in input_df.columns:
+            finder = x.find('_')
+            y = x[finder + 1:]
+            weather_dict[y] = weather_dict[y] + ',' + x if y in weather_dict else x
+        return weather_dict
+
+    # getting the weather parameters dictionary
+    weath_param = classify_parameters(feature_vector_df)
+
+    # getting name of all temperature variables alike
+    temp_max, temp, temp_min = weath_param['temp_max'].split(','), weath_param['temp'].split(','), \
+                               weath_param['temp_min'].split(',')
+    # temp_merge = [temp_max, temp, temp_min]
+    temp_list = temp_max + temp + temp_min
+
+    # Identifying column to drop from our dataset
+    usable_high_corr = ['Valencia_temp_min', 'Madrid_temp', 'Madrid_temp_max']
+    drop_coln_list = [x for x in temp_list if x not in usable_high_corr]
+    # Adding humidity and pressure columns to be dropped
+    final_drop_list = drop_coln_list + ['Madrid_humidity', 'Valencia_pressure']
+
+    # we will be dropping for both the train and the test dataset
+    feature_vector_df = feature_vector_df.drop(final_drop_list, axis=1)
+
+    # Creating a function that combines the various location by the classify weather parameters
+    # Combination is done by using there mean value
+    def impute(input_df):
+        input_df = input_df.copy()
+        weather_dict = classify_parameters(input_df)
+        for x, y in weather_dict.items():
+            coln = y.split(',')
+            if len(coln) < 2:
+                continue
+            else:
+                input_df[x] = input_df[coln].mean(axis=1)
+        return input_df
+
+    predict_vector = impute(feature_vector_df)
+    # predict_vector = feature_vector_df[['Madrid_wind_speed', 'Bilbao_rain_1h', 'Valencia_wind_speed']]
     # ------------------------------------------------------------------------
 
     return predict_vector
 
-def load_model(path_to_model:str):
+
+def load_model(path_to_model: str):
     """Adapter function to load our pretrained model into memory.
 
     Parameters
@@ -85,6 +151,7 @@ def load_model(path_to_model:str):
 """ You may use this section (above the make_prediction function) of the python script to implement 
     any auxiliary functions required to process your model's artifacts.
 """
+
 
 def make_prediction(data, model):
     """Prepare request data for model prediction.
