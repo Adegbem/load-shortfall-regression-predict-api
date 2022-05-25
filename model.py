@@ -66,10 +66,6 @@ def _preprocess_data(data):
         hour = time.split(':')[0]
         return year, month, day, hour  # we can also return a pd.Series([...]) and not use a zip function later on
 
-    # # splitting the time column into features
-    # feature_vector_df['year'], feature_vector_df['month'], feature_vector_df['day'], feature_vector_df['hour'] \
-    #     = zip(*feature_vector_df['time'].map(convert_time))
-
     # splitting the time column into features
     feature_vector_df['year'], feature_vector_df['month'], feature_vector_df['day'], feature_vector_df['hour'] \
         = zip(*feature_vector_df['time'].map(convert_time))
@@ -123,7 +119,24 @@ def _preprocess_data(data):
         return input_df
 
     predict_vector = impute(feature_vector_df)
-    # predict_vector = feature_vector_df[['Madrid_wind_speed', 'Bilbao_rain_1h', 'Valencia_wind_speed']]
+
+    # renaming the temperature(s) columns
+    predict_vector.rename(columns = {'Valencia_temp_min':'temp_min', 'Madrid_temp_max':'temp_max'
+        ,'Madrid_temp':'temp'}, inplace = True)
+    # Creating new features temperature range
+    predict_vector['temp_range'] = predict_vector['temp_min'] - predict_vector['temp_max']
+    # Creating new features wind_force
+    predict_vector['wind_force'] = predict_vector['wind_speed'] * predict_vector['wind_deg']
+    # removing unuseful features from our model (was informed using "Features_Importance")
+    unuseful = ['Bilbao_wind_speed', 'Bilbao_wind_deg', 'Valencia_wind_speed', 'Barcelona_pressure',
+                'Valencia_wind_deg', 'Madrid_pressure', 'pressure', 'Bilbao_weather_id',
+                'Barcelona_weather_id', 'Bilbao_rain_1h', 'Seville_clouds_all', 'Barcelona_wind_speed',
+                'Barcelona_rain_1h', 'Barcelona_rain_3h', 'Bilbao_snow_3h', 'Seville_rain_3h', 'rain_3h',
+                'Valencia_snow_3h', 'year', 'snow_3h', 'Seville_rain_1h', 'Barcelona_wind_deg','rain_1h',
+                'Madrid_rain_1h', 'clouds_all', 'Bilbao_clouds_all', 'Madrid_weather_id', 'wind_deg',
+                'Seville_weather_id', 'Seville_wind_speed', 'weather_id', 'Madrid_clouds_all',
+                'Seville_pressure', 'temp_range', 'humidity', 'Seville_humidity']
+    predict_vector = predict_vector.drop(unuseful, axis=1)
     # ------------------------------------------------------------------------
 
     return predict_vector
